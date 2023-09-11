@@ -1,3 +1,12 @@
+# Project Files
+.idea/
+*.pdf
+
+# C
+ cmake-build-debug/
+model
+wrapper
+
 # Prerequisites
 *.d
 
