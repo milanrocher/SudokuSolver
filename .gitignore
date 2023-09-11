@@ -3,7 +3,7 @@
 *.pdf
 
 # C
- cmake-build-debug/
+cmake-build-debug/
 model
 wrapper
 
