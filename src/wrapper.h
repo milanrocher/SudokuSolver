@@ -1,12 +1,9 @@
 #ifndef BMC_WRAPPER_H
 #define BMC_WRAPPER_H
 
-#include "sudoku.h"
-
-int runCBMC();
-
-int readSudoku(char *fileName, int puzzle[9][9]);
-
-void printSudoku(int puzzle[9][9]);
+int readSudoku(char *fileName, int sudoku[9][9]);
+int createModel(int sudoku[9][9]);
+void runCBMC();
+void printSudoku();
 
 #endif
