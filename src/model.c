@@ -1,6 +1,9 @@
 int main(int argc, char *argv[]) {
+  /*
+  * Sudoku structure.
+  */
   int sudoku[9][9] = {
-    {0, 1, 0, 0, 0, 6, 4, 0, 0},
+    {0, 1, 0, 0, 0, 6, 4, 0, 4},
     {0, 9, 0, 4, 5, 0, 0, 2, 0},
     {5, 0, 0, 0, 0, 7, 0, 0, 0},
     {0, 0, 0, 0, 0, 5, 0, 0, 0},
@@ -11,6 +14,9 @@ int main(int argc, char *argv[]) {
     {0, 0, 1, 0, 0, 0, 0, 7, 0},
   };
 
+  /*
+  * Create nondeterministic search space for empty cells.
+  */
   for (int i = 0; i < 9; ++i) {
     for (int j = 0; j < 9; ++j) {
       if (sudoku[i][j] == 0) {
@@ -24,18 +30,32 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < 9; i++) {
     for (int j = 0; j < 9; j++) {
       int val = sudoku[i][j];
+      /*
+      * There is at least one number in each entry.
+      */
+      __CPROVER_assume(val != 0);
+
+      /*
+      * Each number appears at most once in each row.
+      */
       for (int k = j + 1; k < 9; k++) {
         __CPROVER_assume(sudoku[i][k] != val);
       }
 
+      /*
+      * Each number appears at most once in each col.
+      */
       for (int k = i + 1; k < 9; k++) {
         __CPROVER_assume(sudoku[k][j] != val);
       }
 
-      int block_row = i / 3 * 3;
-      int block_col = j / 3 * 3;
-      for (int m = block_row; m < block_row + 3; m++) {
-        for (int n = block_col; n < block_col + 3; n++) {
+      /*
+      * Each number appears at most once in each block.
+      */
+      int blockRow = i / 3 * 3;
+      int blockCol = j / 3 * 3;
+      for (int m = blockRow; m < blockRow + 3; m++) {
+        for (int n = blockCol; n < blockCol + 3; n++) {
           if (m != i || n != j) {
             __CPROVER_assume(sudoku[m][n] != val);
           }
@@ -44,6 +64,9 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  /*
+  * Start search.
+  */
   assert(0);
 
   return 0;
