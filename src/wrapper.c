@@ -1,9 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 #include "wrapper.h"
 
+#define INDEX(row, col) ((row) * 9 + (col))
+
 int main(int argc, char *argv[]) {
-  int sudoku[9][9];
+  int sudoku[81];
 
   if (argc != 3 && argc != 4) {
     fprintf(stderr, "Usage: %s --<mode> (--silent) <input_file>\n", argv[0]);
@@ -18,24 +22,26 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Error creating model file.\n");
   }
 
-  runCBMC();
-  printSudoku();
+  if (strcmp(argv[1], "--basic")) {
+    runCBMC();
+    printSudoku();
+  } else {
+    // TODO: exhaustive
+  }
 
   return 0;
 }
 
-int readSudoku(char *fileName, int sudoku[9][9]) {
+int readSudoku(char *fileName, int sudoku[81]) {
   FILE *inputFile = fopen(fileName, "r");
   if (!inputFile) {
     return 1;
   }
 
-  for (int i = 0; i < 9; ++i) {
-    for (int j = 0; j < 9; ++j) {
-      if (!fscanf(inputFile, "%d", &sudoku[i][j])) {
-        fclose(inputFile);
-        return 1;
-      }
+  for (int i = 0; i < 81; ++i) {
+    if (!fscanf(inputFile, "%d", &sudoku[i])) {
+      fclose(inputFile);
+      return 1;
     }
   }
 
@@ -44,74 +50,76 @@ int readSudoku(char *fileName, int sudoku[9][9]) {
   return 0;
 }
 
-int createModel(int sudoku[9][9]) {
+int createModel(int sudoku[81]) {
   FILE *outputFile = fopen("model.c", "w");
   if (!outputFile) {
     return 1;
   }
 
+  fprintf(outputFile, "#include <stdio.h>\n");
+  fprintf(outputFile, "#include <stdint.h>\n\n");
+
+  fprintf(outputFile, "#define INDEX(row, col) ((row) * 9 + (col))\n\n");
+
   fprintf(outputFile, "int main(int argc, char *argv[]) {\n");
-  fprintf(outputFile, "  /*\n  * Sudoku structure.\n  */\n");
-  fprintf(outputFile, "  int sudoku[9][9] = {\n");
+  fprintf(outputFile, "  /*\n   * Sudoku structure.\n   */\n");
+  fprintf(outputFile, "  int sudoku[81] = {\n");
 
   for (int i = 0; i < 9; i++) {
-    fprintf(outputFile, "    {");
+    fprintf(outputFile, "      ");
     for (int j = 0; j < 9; j++) {
-      fprintf(outputFile, "%d", sudoku[i][j]);
+      fprintf(outputFile, "%d", sudoku[INDEX(i, j)]);
       if (j < 8) {
         fprintf(outputFile, ", ");
       }
     }
-    fprintf(outputFile, "},\n");
+    fprintf(outputFile, ",\n");
   }
   fprintf(outputFile, "  };\n\n");
 
-  fprintf(outputFile, "  /*\n  * Create nondeterministic search space for empty cells.\n  */\n");
+  fprintf(outputFile, "  /*\n   * Create nondeterministic search space for empty cells.\n   */\n");
   fprintf(outputFile, "  for (int i = 0; i < 9; ++i) {\n");
   fprintf(outputFile, "    for (int j = 0; j < 9; ++j) {\n");
-  fprintf(outputFile, "      if (sudoku[i][j] == 0) {\n");
+  fprintf(outputFile, "      if (sudoku[INDEX(i, j)] == 0) {\n");
   fprintf(outputFile, "        int cell = nondet_int();\n");
   fprintf(outputFile, "        __CPROVER_assume(cell >= 1 && cell <= 9);\n");
-  fprintf(outputFile, "        sudoku[i][j] = cell;\n");
+  fprintf(outputFile, "        sudoku[INDEX(i, j)] = cell;\n");
   fprintf(outputFile, "      }\n");
   fprintf(outputFile, "    }\n");
   fprintf(outputFile, "  }\n\n");
+
+  fprintf(outputFile, "  /*\n   * Bit maks for uniqueness\n   */\n");
+  fprintf(outputFile, "  uint16_t rows[9] = {0};\n");
+  fprintf(outputFile, "  uint16_t cols[9] = {0};\n");
+  fprintf(outputFile, "  uint16_t blocks[9] = {0};\n\n");
 
   fprintf(outputFile, "  for (int i = 0; i < 9; i++) {\n");
   fprintf(outputFile, "    for (int j = 0; j < 9; j++) {\n");
-  fprintf(outputFile, "      int val = sudoku[i][j];\n");
+  fprintf(outputFile, "      int val = sudoku[INDEX(i, j)];\n");
+  fprintf(outputFile, "      int bit = 1 << (val - 1);\n\n");
+
   fprintf(outputFile, "      /*\n");
-  fprintf(outputFile, "      * There is at least one number in each entry.\n");
-  fprintf(outputFile, "      */\n");
-  fprintf(outputFile, "      __CPROVER_assume(val != 0);\n\n");
+  fprintf(outputFile, "       * Each number appears at most once in each row.\n");
+  fprintf(outputFile, "       */\n");
+  fprintf(outputFile, "      __CPROVER_assume(!(rows[i] & bit));\n");
   fprintf(outputFile, "      /*\n");
-  fprintf(outputFile, "      * Each number appears at most once in each row.\n");
-  fprintf(outputFile, "      */\n");
-  fprintf(outputFile, "      for (int k = j + 1; k < 9; k++) {\n");
-  fprintf(outputFile, "        __CPROVER_assume(sudoku[i][k] != val);\n");
-  fprintf(outputFile, "      }\n\n");
+  fprintf(outputFile, "       * Each number appears at most once in each col.\n");
+  fprintf(outputFile, "       */\n");
+  fprintf(outputFile, "      __CPROVER_assume(!(cols[j] & bit));\n");
   fprintf(outputFile, "      /*\n");
-  fprintf(outputFile, "      * Each number appears at most once in each col.\n");
-  fprintf(outputFile, "      */\n");
-  fprintf(outputFile, "      for (int k = i + 1; k < 9; k++) {\n");
-  fprintf(outputFile, "        __CPROVER_assume(sudoku[k][j] != val);\n");
-  fprintf(outputFile, "      }\n\n");
+  fprintf(outputFile, "       * Each number appears at most once in each block.\n");
+  fprintf(outputFile, "       */\n");
+  fprintf(outputFile, "      __CPROVER_assume(!(blocks[(i / 3) * 3 + j / 3] & bit));\n\n");
   fprintf(outputFile, "      /*\n");
-  fprintf(outputFile, "      * Each number appears at most once in each block.\n");
-  fprintf(outputFile, "      */\n");
-  fprintf(outputFile, "      int blockRow = i / 3 * 3;\n");
-  fprintf(outputFile, "      int blockCol = j / 3 * 3;\n");
-  fprintf(outputFile, "      for (int m = blockRow; m < blockRow + 3; m++) {\n");
-  fprintf(outputFile, "        for (int n = blockCol; n < blockCol + 3; n++) {\n");
-  fprintf(outputFile, "          if (m != i || n != j) {\n");
-  fprintf(outputFile, "            __CPROVER_assume(sudoku[m][n] != val);\n");
-  fprintf(outputFile, "          }\n");
-  fprintf(outputFile, "        }\n");
-  fprintf(outputFile, "      }\n");
+  fprintf(outputFile, "       * Set as seen.\n");
+  fprintf(outputFile, "       */\n");
+  fprintf(outputFile, "      rows[i] |= bit;\n");
+  fprintf(outputFile, "      cols[j] |= bit;\n");
+  fprintf(outputFile, "      blocks[(i / 3) * 3 + j / 3] |= bit;\n");
   fprintf(outputFile, "    }\n");
   fprintf(outputFile, "  }\n\n");
 
-  fprintf(outputFile, "  /*\n  * Start search.\n  */\n");
+  fprintf(outputFile, "  /*\n   * Start search.\n   */\n");
   fprintf(outputFile, "  assert(0);\n\n");
 
   fprintf(outputFile, "  return 0;\n");
