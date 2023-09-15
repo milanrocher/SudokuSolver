@@ -6,28 +6,56 @@
 
 #define INDEX(row, col) ((row) * 9 + (col))
 
+int silentMode = 0;
+
 int main(int argc, char *argv[]) {
   int sudoku[81];
 
   if (argc != 3 && argc != 4) {
-    fprintf(stderr, "Usage: %s --<mode> (--silent) <input_file>\n", argv[0]);
+    fprintf(stderr, "Usage: %s --<mode> [--silent] <input_file>\n", argv[0]);
     return 1;
+  }
+
+  if (argc == 4 && strcmp(argv[2], "--silent") == 0) {
+    silentMode = 1;
   }
 
   if (readSudoku(argv[argc - 1], sudoku) == 1) {
     fprintf(stderr, "Error loading sudoku.\n");
+    return 1;
   }
 
   if (createModel(sudoku) == 1) {
     fprintf(stderr, "Error creating model file.\n");
+    return 1;
   }
 
-  if (strcmp(argv[1], "--basic")) {
+  struct timespec start, end;
+  clock_gettime(CLOCK_MONOTONIC, &start);
+
+  if (strcmp(argv[1], "--basic") == 0) {
     runCBMC();
-    printSudoku();
-  } else {
-    // TODO: exhaustive
+    if (printSudoku() == 1) {
+      printf("UNSOLVABLE\n");
+    }
+  } else if (strcmp(argv[1], "--exhaustive") == 0) {
+    int solutionCount = 0;
+
+    while (1) {
+      runCBMC();
+      printSudoku();
+
+      // TODO
+      solutionCount++;
+    }
+
+    // Print the total number of solutions
+    printf("NUMBER OF SOLUTIONS: %d\n", solutionCount);
   }
+
+  clock_gettime(CLOCK_MONOTONIC, &end);
+  double time_taken = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+  printf("Elapsed Time: %.9f seconds\n", time_taken);
 
   return 0;
 }
@@ -134,10 +162,10 @@ void runCBMC() {
   system("/home/milan/.repos/cbmc-cbmc-5.90.0/src/cbmc/cbmc --trace model.c | grep -o 'val=[0-9]\\+' | cut -d '=' -f 2 > output.txt");
 }
 
-void printSudoku() {
+int printSudoku() {
   FILE *inputFile = fopen("output.txt", "r");
   if (!inputFile) {
-    return;
+    return 1;
   }
 
   for (int i = 0; i < 9; i++) {
@@ -145,8 +173,7 @@ void printSudoku() {
       int num;
       if (fscanf(inputFile, "%d", &num) != 1) {
         fclose(inputFile);
-        printf("UNSOLVABLE\n");
-        return;
+        return 1;
       }
       printf("%d", num);
       if (j < 8) {
@@ -157,4 +184,13 @@ void printSudoku() {
   }
 
   fclose(inputFile);
+  return 0;
+}
+
+unsigned long hashArray(int arr[]) {
+  unsigned long hash = 0;
+  for (int i = 0; i < 81; i++) {
+    hash = (hash * 37) + arr[i];
+  }
+  return hash;
 }
