@@ -36,6 +36,9 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  /*
+   * Generate the model.c file.
+   */
   if (createModel(sudoku, NULL, 0) == 1) {
     fprintf(stderr, "Error creating model file.\n");
     return 1;
@@ -72,7 +75,7 @@ int main(int argc, char *argv[]) {
       solutionCount++;
 
       if (readSudoku("output.txt", solution) == 1) {
-        fprintf(stderr, "Error loading sudoku.\n");
+        fprintf(stderr, "Error loading solution.\n");
         return 1;
       }
 
@@ -80,7 +83,7 @@ int main(int argc, char *argv[]) {
       hashes[solutionCount] = hash;
 
       if (createModel(sudoku, hashes, solutionCount) == 1) {
-        fprintf(stderr, "Error creating model file.\n");
+        fprintf(stderr, "Error creating updated model file.\n");
         return 1;
       }
     }
@@ -93,12 +96,12 @@ int main(int argc, char *argv[]) {
 
 int readSudoku(char *fileName, int sudoku[81]) {
   FILE *inputFile = fopen(fileName, "r");
-  if (!inputFile) {
+  if (inputFile == NULL) {
     return 1;
   }
 
   for (int i = 0; i < 81; ++i) {
-    if (!fscanf(inputFile, "%d", &sudoku[i])) {
+    if (fscanf(inputFile, "%d", &sudoku[i]) != 1) {
       fclose(inputFile);
       return 1;
     }
@@ -111,11 +114,10 @@ int readSudoku(char *fileName, int sudoku[81]) {
 
 int createModel(int sudoku[81], unsigned long hashes[100], int solutionCount) {
   FILE *outputFile = fopen("model.c", "w");
-  if (!outputFile) {
+  if (outputFile == NULL) {
     return 1;
   }
 
-  fprintf(outputFile, "#include <stdio.h>\n");
   fprintf(outputFile, "#include <stdint.h>\n\n");
 
   fprintf(outputFile, "#define INDEX(row, col) ((row) * 9 + (col))\n\n");
@@ -206,15 +208,21 @@ int createModel(int sudoku[81], unsigned long hashes[100], int solutionCount) {
 }
 
 void runCBMC() {
+  /*
+   * Execute system command and use pipelines to save the cell values in output.txt.
+   */
   system("/home/milan/.repos/cbmc-cbmc-5.90.0/src/cbmc/cbmc --trace model.c | grep -o 'val=[0-9]\\+' | cut -d '=' -f 2 > output.txt");
 }
 
 int printSudoku() {
   FILE *inputFile = fopen("output.txt", "r");
-  if (!inputFile) {
+  if (inputFile == NULL) {
     return 1;
   }
 
+  /*
+   * Only print when not silent mode.
+   */
   if (silentMode == 0) {
     for (int i = 0; i < 9; i++) {
       for (int j = 0; j < 9; j++) {
@@ -231,6 +239,9 @@ int printSudoku() {
       printf("\n");
     }
   } else {
+    /*
+     * Check for a solution.
+     */
     if (fgetc(inputFile) == EOF) {
       fclose(inputFile);
       return 1;
@@ -242,6 +253,9 @@ int printSudoku() {
 }
 
 unsigned long hashArray(int arr[]) {
+  /*
+   * Hash using a large prime to minimise collisions.
+   */
   unsigned long hash = 0;
   for (int i = 0; i < 81; i++) {
     hash = (hash * 37) + arr[i];
