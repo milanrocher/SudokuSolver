@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include "wrapper.h"
 
 #define INDEX(row, col) ((row) * 9 + (col))
 
 int silentMode = 0;
+int mode = 0;
 
 int main(int argc, char *argv[]) {
   int sudoku[81];
@@ -16,46 +16,77 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  if (argc == 4 && strcmp(argv[2], "--silent") == 0) {
+  /*
+   * Set execution mode.
+   */
+  if (strcmp(argv[1], "--basic") == 0) {
+    mode = 0;
+  } else if (strcmp(argv[1], "--exhaustive") == 0) {
+    mode = 1;
+  }
+  if (mode == 1 && argc == 4 && strcmp(argv[2], "--silent") == 0) {
     silentMode = 1;
   }
 
+  /*
+   * Read Sudoku puzzle from input.
+   */
   if (readSudoku(argv[argc - 1], sudoku) == 1) {
     fprintf(stderr, "Error loading sudoku.\n");
     return 1;
   }
 
-  if (createModel(sudoku) == 1) {
+  if (createModel(sudoku, NULL, 0) == 1) {
     fprintf(stderr, "Error creating model file.\n");
     return 1;
   }
 
-  struct timespec start, end;
-  clock_gettime(CLOCK_MONOTONIC, &start);
-
-  if (strcmp(argv[1], "--basic") == 0) {
+  /*
+   * Run CBMC model checker.
+   */
+  if (mode == 0) {
+    /*
+     * Basic checker.
+     */
     runCBMC();
     if (printSudoku() == 1) {
       printf("UNSOLVABLE\n");
     }
-  } else if (strcmp(argv[1], "--exhaustive") == 0) {
+  } else if (mode == 1) {
+    /*
+     * Exhaustive checker.
+     */
     int solutionCount = 0;
+    unsigned long hashes[100];
 
-    while (1) {
+    while (solutionCount < 100) {
+      int solution[81];
+
       runCBMC();
-      printSudoku();
-
-      // TODO
+      if (printSudoku() == 1) {
+        break;
+      }
+      if (silentMode == 0) {
+        printf("\n");
+      }
       solutionCount++;
+
+      if (readSudoku("output.txt", solution) == 1) {
+        fprintf(stderr, "Error loading sudoku.\n");
+        return 1;
+      }
+
+      unsigned long hash = hashArray(solution);
+      hashes[solutionCount] = hash;
+
+      if (createModel(sudoku, hashes, solutionCount) == 1) {
+        fprintf(stderr, "Error creating model file.\n");
+        return 1;
+      }
     }
 
-    // Print the total number of solutions
     printf("NUMBER OF SOLUTIONS: %d\n", solutionCount);
   }
-
-  clock_gettime(CLOCK_MONOTONIC, &end);
-  double time_taken = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
-  printf("Elapsed Time: %.9f seconds\n", time_taken);
 
   return 0;
 }
@@ -78,7 +109,7 @@ int readSudoku(char *fileName, int sudoku[81]) {
   return 0;
 }
 
-int createModel(int sudoku[81]) {
+int createModel(int sudoku[81], unsigned long hashes[100], int solutionCount) {
   FILE *outputFile = fopen("model.c", "w");
   if (!outputFile) {
     return 1;
@@ -88,6 +119,8 @@ int createModel(int sudoku[81]) {
   fprintf(outputFile, "#include <stdint.h>\n\n");
 
   fprintf(outputFile, "#define INDEX(row, col) ((row) * 9 + (col))\n\n");
+
+  fprintf(outputFile, "int nondet_int();\n\n");
 
   fprintf(outputFile, "int main(int argc, char *argv[]) {\n");
   fprintf(outputFile, "  /*\n   * Sudoku structure.\n   */\n");
@@ -116,7 +149,21 @@ int createModel(int sudoku[81]) {
   fprintf(outputFile, "    }\n");
   fprintf(outputFile, "  }\n\n");
 
-  fprintf(outputFile, "  /*\n   * Bit maks for uniqueness\n   */\n");
+  if (mode == 1) {
+    fprintf(outputFile, "  /*\n   * Ensure unique solution.\n   */\n");
+    fprintf(outputFile, "  unsigned long hash = 0;\n");
+    fprintf(outputFile, "  for (int i = 0; i < 81; i++) {\n");
+    fprintf(outputFile, "    hash = (hash * 37) + sudoku[i];\n");
+    fprintf(outputFile, "  }\n");
+
+    for (int i = 1; i <= solutionCount; i++) {
+      fprintf(outputFile, "  __CPROVER_assume(hash != %luul);\n", hashes[i]);
+    }
+  }
+
+  fprintf(outputFile, "\n");
+
+  fprintf(outputFile, "  /*\n   * Bit masks for uniqueness\n   */\n");
   fprintf(outputFile, "  uint16_t rows[9] = {0};\n");
   fprintf(outputFile, "  uint16_t cols[9] = {0};\n");
   fprintf(outputFile, "  uint16_t blocks[9] = {0};\n\n");
@@ -148,7 +195,7 @@ int createModel(int sudoku[81]) {
   fprintf(outputFile, "  }\n\n");
 
   fprintf(outputFile, "  /*\n   * Start search.\n   */\n");
-  fprintf(outputFile, "  assert(0);\n\n");
+  fprintf(outputFile, "  __CPROVER_assert(0, \"Search.\");\n");
 
   fprintf(outputFile, "  return 0;\n");
   fprintf(outputFile, "}\n");
@@ -168,19 +215,26 @@ int printSudoku() {
     return 1;
   }
 
-  for (int i = 0; i < 9; i++) {
-    for (int j = 0; j < 9; j++) {
-      int num;
-      if (fscanf(inputFile, "%d", &num) != 1) {
-        fclose(inputFile);
-        return 1;
+  if (silentMode == 0) {
+    for (int i = 0; i < 9; i++) {
+      for (int j = 0; j < 9; j++) {
+        int num;
+        if (fscanf(inputFile, "%d", &num) != 1) {
+          fclose(inputFile);
+          return 1;
+        }
+        printf("%d", num);
+        if (j < 8) {
+          printf(" ");
+        }
       }
-      printf("%d", num);
-      if (j < 8) {
-        printf(" ");
-      }
+      printf("\n");
     }
-    printf("\n");
+  } else {
+    if (fgetc(inputFile) == EOF) {
+      fclose(inputFile);
+      return 1;
+    }
   }
 
   fclose(inputFile);
