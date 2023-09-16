@@ -5,12 +5,10 @@
 int nondet_int();
 
 int main(int argc, char *argv[]) {
-  /*
-   * Sudoku structure.
-   */
+  /* Sudoku structure. */
   int sudoku[81] = {
       2, 9, 5, 7, 4, 3, 8, 6, 1,
-      4, 3, 1, 8, 6, 5, 9, 0, 7,
+      4, 3, 1, 8, 6, 5, 9, 0, 0,
       8, 7, 6, 1, 9, 2, 5, 4, 3,
       3, 8, 7, 4, 5, 9, 2, 1, 6,
       6, 1, 2, 3, 8, 7, 4, 9, 5,
@@ -20,9 +18,7 @@ int main(int argc, char *argv[]) {
       1, 5, 4, 9, 3, 8, 6, 0, 0,
   };
 
-  /*
-   * Create nondeterministic search space for empty cells.
-   */
+  /* Create nondeterministic search space for empty cells. */
   for (int i = 0; i < 9; ++i) {
     for (int j = 0; j < 9; ++j) {
       if (sudoku[INDEX(i, j)] == 0) {
@@ -33,18 +29,15 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  /*
-   * Ensure unique solution.
-   */
+  /* Ensure unique solution. */
   unsigned long hash = 0;
   for (int i = 0; i < 81; i++) {
     hash = (hash * 37) + sudoku[i];
   }
   __CPROVER_assume(hash != 6568365452116789893ul);
+  __CPROVER_assume(hash != 6427881628716596085ul);
 
-  /*
-   * Bit masks for uniqueness
-   */
+  /* Bit masks for uniqueness and efficiency. */
   uint16_t rows[9] = {0};
   uint16_t cols[9] = {0};
   uint16_t blocks[9] = {0};
@@ -54,31 +47,21 @@ int main(int argc, char *argv[]) {
       int val = sudoku[INDEX(i, j)];
       int bit = 1 << (val - 1);
 
-      /*
-       * Each number appears at most once in each row.
-       */
+      /* Each number appears at most once in each row. */
       __CPROVER_assume(!(rows[i] & bit));
-      /*
-       * Each number appears at most once in each col.
-       */
+      /* Each number appears at most once in each col. */
       __CPROVER_assume(!(cols[j] & bit));
-      /*
-       * Each number appears at most once in each block.
-       */
+      /* Each number appears at most once in each block. */
       __CPROVER_assume(!(blocks[(i / 3) * 3 + j / 3] & bit));
 
-      /*
-       * Set as seen.
-       */
+      /* Set as seen. */
       rows[i] |= bit;
       cols[j] |= bit;
       blocks[(i / 3) * 3 + j / 3] |= bit;
     }
   }
 
-  /*
-   * Start search.
-   */
+  /* Start search. */
   __CPROVER_assert(0, "Search.");
   return 0;
 }

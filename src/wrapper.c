@@ -4,6 +4,7 @@
 #include "wrapper.h"
 
 #define INDEX(row, col) ((row) * 9 + (col))
+#define MAXSOLUTIONS 100
 
 int silentMode = 0;
 int mode = 0;
@@ -16,9 +17,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  /*
-   * Set execution mode.
-   */
+  /* Set execution mode. */
   if (strcmp(argv[1], "--basic") == 0) {
     mode = 0;
   } else if (strcmp(argv[1], "--exhaustive") == 0) {
@@ -28,52 +27,47 @@ int main(int argc, char *argv[]) {
     silentMode = 1;
   }
 
-  /*
-   * Read Sudoku puzzle from input.
-   */
+  /* Read Sudoku puzzle from input. */
   if (readSudoku(argv[argc - 1], sudoku) == 1) {
     fprintf(stderr, "Error loading sudoku.\n");
     return 1;
   }
 
-  /*
-   * Generate the model.c file.
-   */
+  /* Generate the model.c file. */
   if (createModel(sudoku, NULL, 0) == 1) {
     fprintf(stderr, "Error creating model file.\n");
     return 1;
   }
 
-  /*
-   * Run CBMC model checker.
-   */
+  /* Run CBMC model checker. */
   if (mode == 0) {
-    /*
-     * Basic checker.
-     */
+    /* Basic checker. */
     runCBMC();
     if (printSudoku() == 1) {
       printf("UNSOLVABLE\n");
     }
   } else if (mode == 1) {
-    /*
-     * Exhaustive checker.
-     */
+    /* Exhaustive checker. */
     int solutionCount = 0;
-    unsigned long hashes[100];
+    unsigned long hashes[MAXSOLUTIONS];
 
-    while (solutionCount < 100) {
+    /* Search for all solutions. */
+    while (solutionCount < MAXSOLUTIONS) {
       int solution[81];
 
       runCBMC();
       if (printSudoku() == 1) {
+        /* No remaining solutions. */
         break;
       }
+
+      /* Print newline between puzzles. */
       if (silentMode == 0) {
         printf("\n");
       }
       solutionCount++;
 
+      /* Get solution and create hash to update the model. */
       if (readSudoku("output.txt", solution) == 1) {
         fprintf(stderr, "Error loading solution.\n");
         return 1;
@@ -100,6 +94,7 @@ int readSudoku(char *fileName, int sudoku[81]) {
     return 1;
   }
 
+  /* Scan each digit into 1D array. */
   for (int i = 0; i < 81; ++i) {
     if (fscanf(inputFile, "%d", &sudoku[i]) != 1) {
       fclose(inputFile);
@@ -125,7 +120,7 @@ int createModel(int sudoku[81], unsigned long hashes[100], int solutionCount) {
   fprintf(outputFile, "int nondet_int();\n\n");
 
   fprintf(outputFile, "int main(int argc, char *argv[]) {\n");
-  fprintf(outputFile, "  /*\n   * Sudoku structure.\n   */\n");
+  fprintf(outputFile, "  /* Sudoku structure. */\n");
   fprintf(outputFile, "  int sudoku[81] = {\n");
 
   for (int i = 0; i < 9; i++) {
@@ -140,7 +135,7 @@ int createModel(int sudoku[81], unsigned long hashes[100], int solutionCount) {
   }
   fprintf(outputFile, "  };\n\n");
 
-  fprintf(outputFile, "  /*\n   * Create nondeterministic search space for empty cells.\n   */\n");
+  fprintf(outputFile, "  /* Create nondeterministic search space for empty cells. */\n");
   fprintf(outputFile, "  for (int i = 0; i < 9; ++i) {\n");
   fprintf(outputFile, "    for (int j = 0; j < 9; ++j) {\n");
   fprintf(outputFile, "      if (sudoku[INDEX(i, j)] == 0) {\n");
@@ -152,7 +147,7 @@ int createModel(int sudoku[81], unsigned long hashes[100], int solutionCount) {
   fprintf(outputFile, "  }\n\n");
 
   if (mode == 1) {
-    fprintf(outputFile, "  /*\n   * Ensure unique solution.\n   */\n");
+    fprintf(outputFile, "  /* Ensure unique solution. */\n");
     fprintf(outputFile, "  unsigned long hash = 0;\n");
     fprintf(outputFile, "  for (int i = 0; i < 81; i++) {\n");
     fprintf(outputFile, "    hash = (hash * 37) + sudoku[i];\n");
@@ -165,7 +160,7 @@ int createModel(int sudoku[81], unsigned long hashes[100], int solutionCount) {
 
   fprintf(outputFile, "\n");
 
-  fprintf(outputFile, "  /*\n   * Bit masks for uniqueness\n   */\n");
+  fprintf(outputFile, "  /* Bit masks for uniqueness and efficiency. */\n");
   fprintf(outputFile, "  uint16_t rows[9] = {0};\n");
   fprintf(outputFile, "  uint16_t cols[9] = {0};\n");
   fprintf(outputFile, "  uint16_t blocks[9] = {0};\n\n");
@@ -175,28 +170,20 @@ int createModel(int sudoku[81], unsigned long hashes[100], int solutionCount) {
   fprintf(outputFile, "      int val = sudoku[INDEX(i, j)];\n");
   fprintf(outputFile, "      int bit = 1 << (val - 1);\n\n");
 
-  fprintf(outputFile, "      /*\n");
-  fprintf(outputFile, "       * Each number appears at most once in each row.\n");
-  fprintf(outputFile, "       */\n");
+  fprintf(outputFile, "      /* Each number appears at most once in each row. */\n");
   fprintf(outputFile, "      __CPROVER_assume(!(rows[i] & bit));\n");
-  fprintf(outputFile, "      /*\n");
-  fprintf(outputFile, "       * Each number appears at most once in each col.\n");
-  fprintf(outputFile, "       */\n");
+  fprintf(outputFile, "      /* Each number appears at most once in each col. */\n");
   fprintf(outputFile, "      __CPROVER_assume(!(cols[j] & bit));\n");
-  fprintf(outputFile, "      /*\n");
-  fprintf(outputFile, "       * Each number appears at most once in each block.\n");
-  fprintf(outputFile, "       */\n");
+  fprintf(outputFile, "      /* Each number appears at most once in each block. */\n");
   fprintf(outputFile, "      __CPROVER_assume(!(blocks[(i / 3) * 3 + j / 3] & bit));\n\n");
-  fprintf(outputFile, "      /*\n");
-  fprintf(outputFile, "       * Set as seen.\n");
-  fprintf(outputFile, "       */\n");
+  fprintf(outputFile, "      /* Set as seen. */\n");
   fprintf(outputFile, "      rows[i] |= bit;\n");
   fprintf(outputFile, "      cols[j] |= bit;\n");
   fprintf(outputFile, "      blocks[(i / 3) * 3 + j / 3] |= bit;\n");
   fprintf(outputFile, "    }\n");
   fprintf(outputFile, "  }\n\n");
 
-  fprintf(outputFile, "  /*\n   * Start search.\n   */\n");
+  fprintf(outputFile, "  /* Start search. */\n");
   fprintf(outputFile, "  __CPROVER_assert(0, \"Search.\");\n");
 
   fprintf(outputFile, "  return 0;\n");
@@ -208,9 +195,7 @@ int createModel(int sudoku[81], unsigned long hashes[100], int solutionCount) {
 }
 
 void runCBMC() {
-  /*
-   * Execute system command and use pipelines to save the cell values in output.txt.
-   */
+  /* Execute system command and use pipelines to save the cell values in output.txt. */
   system("/home/milan/.repos/cbmc-cbmc-5.90.0/src/cbmc/cbmc --trace model.c | grep -o 'val=[0-9]\\+' | cut -d '=' -f 2 > output.txt");
 }
 
@@ -220,14 +205,13 @@ int printSudoku() {
     return 1;
   }
 
-  /*
-   * Only print when not silent mode.
-   */
+  /* Only print when not silent mode. */
   if (silentMode == 0) {
     for (int i = 0; i < 9; i++) {
       for (int j = 0; j < 9; j++) {
         int num;
         if (fscanf(inputFile, "%d", &num) != 1) {
+          /* No solution found. */
           fclose(inputFile);
           return 1;
         }
@@ -239,9 +223,7 @@ int printSudoku() {
       printf("\n");
     }
   } else {
-    /*
-     * Check for a solution.
-     */
+    /* Check for a solution. */
     if (fgetc(inputFile) == EOF) {
       fclose(inputFile);
       return 1;
@@ -253,9 +235,7 @@ int printSudoku() {
 }
 
 unsigned long hashArray(int arr[]) {
-  /*
-   * Hash using a large prime to minimise collisions.
-   */
+  /* Hash using a large prime to minimise collisions. */
   unsigned long hash = 0;
   for (int i = 0; i < 81; i++) {
     hash = (hash * 37) + arr[i];

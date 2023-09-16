@@ -56,6 +56,7 @@ The wrapper is in charge of the whole execution process and creating the model.
 1. The Sudoku puzzle is read from an input file and stored in memory.
 2. The program generates a CBMC model file (model.c) that includes constraints and assumptions for the Sudoku puzzle.
    This was chosen as using external data structures does not work if CBMC is used to compile the model.c file.
+   Furthermore, the minimal encodings were used from [here](./research/sudoku-as-SAT.pdf).
 3. Basic Mode: \
    3.1. The CBMC tool is started on the generated model file. \
    3.2. The solution is printed to standard output, or if no solution is found, "UNSOLVABLE" is printed.
