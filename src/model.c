@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdint.h>
 
 #define INDEX(row, col) ((row) * 9 + (col))
@@ -11,7 +10,7 @@ int main(int argc, char *argv[]) {
    */
   int sudoku[81] = {
       2, 9, 5, 7, 4, 3, 8, 6, 1,
-      4, 3, 1, 8, 6, 5, 9, 0, 0,
+      4, 3, 1, 8, 6, 5, 9, 0, 7,
       8, 7, 6, 1, 9, 2, 5, 4, 3,
       3, 8, 7, 4, 5, 9, 2, 1, 6,
       6, 1, 2, 3, 8, 7, 4, 9, 5,
@@ -42,7 +41,6 @@ int main(int argc, char *argv[]) {
     hash = (hash * 37) + sudoku[i];
   }
   __CPROVER_assume(hash != 6568365452116789893ul);
-  __CPROVER_assume(hash != 6427881628716596085ul);
 
   /*
    * Bit masks for uniqueness
