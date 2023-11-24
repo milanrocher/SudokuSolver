@@ -1,4 +1,5 @@
-# Software Verification and Analysis
+# Sudoku Solver
+
 ### C Bounded Model Checker
 This Sudoku solver is implemented in C and uses the CBMC tool to verify and find solutions for Sudoku puzzles.
 
@@ -82,5 +83,4 @@ The model file (created by the wrapper) describes the Sudoku model using CBMC fu
 7. The CBMC search is started with a failing assertion.
 
 ## Author
-Milan Rocher \
-23642114
+Milan Rocher
